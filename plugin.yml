@@ -1,0 +1,7 @@
+name: SensitiveChests
+main: me.slam1000bob.SensitiveChests.SChests
+author: 'Slam1000bob or Jerod5'
+version: 1.2
+commands:
+  sc:
+    description: Allows players to register wooden pressure plates.
