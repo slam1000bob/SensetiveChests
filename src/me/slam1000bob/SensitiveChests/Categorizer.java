@@ -3,13 +3,13 @@ package me.slam1000bob.SensitiveChests;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.bukkit.entity.Item;
+import org.bukkit.inventory.ItemStack;
 
 public class Categorizer {
 	
-	public static List<Category> getCatagories(Item i) {
+	public static List<Category> getCategories(ItemStack i) {
 		List<Category> c = new ArrayList<Category>();
-		switch(i.getItemStack().getType()){
+		switch(i.getType()){
 		case ANVIL:
 			break;
 		case APPLE:

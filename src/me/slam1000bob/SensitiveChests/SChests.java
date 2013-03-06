@@ -11,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -30,8 +31,10 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.material.Sign;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -129,8 +132,8 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 	    }
 	}
 	
-	public boolean addItemToNearestChest(Item i){
-		Block block = i.getLocation().getBlock();
+	public boolean addItemToNearestChest(ItemStack is, Location loc){
+		Block block = loc.getBlock();
 		int rad = chestRadius*2+1;
 		if(block.getType() != Material.WOOD_PLATE)
 			for(BlockFace face : BlockFace.values())
@@ -164,13 +167,12 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 									hasEmptySlot = true;
 									break;
 								}
-							ItemStack itemToAdd = i.getItemStack();
-							int foundcount = itemToAdd.getAmount();
+							int foundcount = is.getAmount();
 							for(ItemStack stack : inv.getContents()){
-								if(stack == null) foundcount -= itemToAdd.getMaxStackSize();
-								if(stack != null && stack.getType() == itemToAdd.getType()) {
-									if(stack.getData().equals(itemToAdd.getData()))
-										foundcount -= itemToAdd.getMaxStackSize() - stack.getAmount();
+								if(stack == null) foundcount -= is.getMaxStackSize();
+								if(stack != null && stack.getType() == is.getType()) {
+									if(stack.getData().equals(is.getData()))
+										foundcount -= is.getMaxStackSize() - stack.getAmount();
 								}
 							}
 							boolean canContainitem = foundcount <= 0;
@@ -180,22 +182,25 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 					}
 				}
 			}
-			Chest chest = sort(i, possChests);
+			Chest chest = sort(is, possChests);
 			if(chest != null){
-				chest.getInventory().addItem(i.getItemStack());
-				i.remove();
+				chest.getInventory().addItem(is);
 				return true;
 			}
 		}
 		return false;
 	}
 	
-	public Chest sort(Item i, List<Chest> chests){
-		List<Category> cats = Categorizer.getCatagories(i);
-		List<SChest> moreSChests = new ArrayList<SChest>();
+	public boolean addItemToNearestChest(Item i){
+		return addItemToNearestChest(i.getItemStack(), i.getLocation());
+	}
+	
+	public Chest sort(ItemStack is, List<Chest> chests){
+		List<Category> cats = Categorizer.getCategories(is);
+		List<SChest> SChests = new ArrayList<SChest>();
 		List<Block> sides = new ArrayList<Block>();
-		ItemStack is = i.getItemStack();
-		for(Chest chest : chests){
+		for(int i = chests.size()-1; i>=0; i--){
+			Chest chest = chests.get(i);
 			sides.add(chest.getBlock().getRelative(BlockFace.NORTH));
 			sides.add(chest.getBlock().getRelative(BlockFace.SOUTH));
 			sides.add(chest.getBlock().getRelative(BlockFace.EAST));
@@ -215,10 +220,11 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 							lines.add(sign2.getLine(1).toLowerCase());
 							lines.add(sign2.getLine(2).toLowerCase());
 							lines.add(sign2.getLine(3).toLowerCase());
+							chests.remove(chest);
 							
 							boolean canAdd = false;
 							for(Category c : cats)
-								if(lines.contains(c.getTheName()) || lines.contains(Category.MISC.getTheName())){
+								if(lines.contains(c.getTheName())){
 									sc.addCatagory(c);
 									canAdd = true;
 								}
@@ -229,8 +235,7 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 							}
 								
 							if(canAdd){
-								moreSChests.add(sc);
-								chests.remove(chest);
+								SChests.add(sc);
 							}
 						}
 					}
@@ -240,21 +245,25 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 		}
 		Chest mostPriority = null;
 		int priority = 1000;
-		for(SChest sc : moreSChests)
+		for(SChest sc : SChests)
 			for(Category c : sc.getCatagories())
 				if(c.getPriority()<priority)
 					mostPriority = sc.getChest();
 		if(mostPriority == null)
-			if(chests.size() > 0 && chests.get(0) != null)
-				return chests.get(0);
+			if(chests.size() > 0)
+				for(Chest chest : chests)
+					for(SChest sc : SChests)
+						if(sc.getAttached() != null)
+							if(!twoLocationsEqual(sc.getAttached().getLocation(), chest.getLocation()))
+								return chest;
 		return mostPriority;
 	}
 	
 	public boolean twoLocationsEqual(Location l1, Location l2){
 		if(l1.getWorld().getName().equals(l2.getWorld().getName()) && 
-				Math.abs(Math.abs(l1.getX())-Math.abs(l2.getX()))<=1 && 
-				Math.abs(Math.abs(l1.getY())-Math.abs(l2.getY()))<=1 && 
-				Math.abs(Math.abs(l1.getZ())-Math.abs(l2.getZ()))<=1){
+				Math.abs(Math.abs(l1.getX())-Math.abs(l2.getX()))<=.25 && 
+				Math.abs(Math.abs(l1.getY())-Math.abs(l2.getY()))<=.25 && 
+				Math.abs(Math.abs(l1.getZ())-Math.abs(l2.getZ()))<=.25){
 			return true;
 		}
 		return false;
@@ -268,6 +277,46 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 	@EventHandler
 	public void onItemSpawn(ItemSpawnEvent event){
 		items.add(new ChestItem(event.getEntity(), event.getEntity().getLocation()));
+	}
+	
+	@SuppressWarnings("deprecation")
+	@EventHandler
+	public void onPlayerToggleSneak(PlayerToggleSneakEvent event){
+		if(event.getPlayer().getLocation().getBlock().getType() == Material.WOOD_PLATE){
+			Player player = event.getPlayer();
+			PlayerInventory inv = player.getInventory();
+			Block block = player.getLocation().getBlock();
+			if(player.getGameMode() == GameMode.CREATIVE) return;
+			boolean registered = false;
+			for(Plate plate : plates)
+				if(twoLocationsEqual(block.getLocation(), plate.getPlate().getLocation()))
+					registered = true;
+			if(registered){
+				if(player.isSneaking()){
+					for(int i = 0; i<inv.getSize(); i++){
+						ItemStack is = inv.getItem(i);
+						if(is != null){
+							if(addItemToNearestChest(is, block.getLocation())){
+								inv.setItem(i, null);
+							}
+						}
+					}
+					if(inv.getHelmet() != null)
+						if(addItemToNearestChest(inv.getHelmet(), block.getLocation()))
+							inv.setHelmet(null);
+					if(inv.getChestplate() != null)
+						if(addItemToNearestChest(inv.getChestplate(), block.getLocation()))
+							inv.setChestplate(null);
+					if(inv.getLeggings() != null)
+						if(addItemToNearestChest(inv.getLeggings(), block.getLocation()))
+							inv.setLeggings(null);
+					if(inv.getBoots() != null)
+						if(addItemToNearestChest(inv.getBoots(), block.getLocation()))
+							inv.setBoots(null);
+					player.updateInventory();
+				}
+			}
+		}
 	}
 	
 	@EventHandler
@@ -329,8 +378,10 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 			for(ChestItem i : items){
 				Item item = i.getItem();
 				if(item.isValid() && item.getLocation().distance(i.getLastLoc()) < .05){
-					if(addItemToNearestChest(item))
+					if(addItemToNearestChest(item)){
+						item.remove();
 						items.remove(i);
+					}
 				}else if(item.isValid())
 					i.setLastLoc(item.getLocation());
 				else 
@@ -366,7 +417,6 @@ public class SChests extends JavaPlugin implements Listener, CommandExecutor{
 		public void setChest(Chest chest) {this.chest = chest;}
 		public List<Category> getCatagories() {return categories;}
 		public void addCatagory(Category c){categories.add(c);}
-		@SuppressWarnings("unused")
 		public Chest getAttached() {return attached;}
 		public void setAttached(Chest attached) {this.attached = attached;}
 	}

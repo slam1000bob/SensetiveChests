@@ -13,8 +13,7 @@ public enum Category {
 	 POTION ("potion",8),
 	 LEATHER ("leather",7),
 	 STONE ("stone",5),
-	 GOLD ("gold",4),
-	 MISC ("misc",14);
+	 GOLD ("gold",4);
 	 
 	 private String name;
 	 private int priority;
